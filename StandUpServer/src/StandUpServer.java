@@ -20,8 +20,7 @@ public class StandUpServer {
 	ServerSocket listener = null;	// ServerSocket: 연결 요청을 기다리는 소켓
 	Socket socket = null;
 	
-	HashMap<String, PrintWriter> hashMap;
-	ArrayList<String> players;
+	ArrayList<Members> players;
 	
 	public StandUpServer() {
 		try {
@@ -35,13 +34,12 @@ public class StandUpServer {
 			System.out.println("*************************************************");
 			System.out.println("클라이언트의 접속을 기다립니다...");
 			
-			hashMap = new HashMap<>();
 			players = new ArrayList<>();
 			
 			while(true) {
 				socket = listener.accept();		// 클라이언트로부터 연결 요청 수신 - 통신용 소켓 생성
 				if(socket != null) {
-					svrThread = new StandUpServerThread(socket, hashMap, players);
+					svrThread = new StandUpServerThread(socket, players);
 					thread = new Thread(svrThread);
 					thread.start();
 				}
