@@ -5,15 +5,18 @@ import java.io.PrintWriter;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Locale;
 import java.util.Set;
 import java.util.Vector;
 
 public class StandUpServerThread implements Runnable {
-	
+
 	private static final int MAX_PLAYER = 5;
-	
+	private static final long MONEY = 100000000;
+
 	Socket socket;
 
 	BufferedReader in; // 데이터 수신용
@@ -32,7 +35,6 @@ public class StandUpServerThread implements Runnable {
 	boolean boolReset = true;
 
 	Boolean player2 = false;
-	int[] cards = new int[4];
 
 	int xPos = 0;
 	int yPos = 0;
@@ -40,8 +42,6 @@ public class StandUpServerThread implements Runnable {
 	public StandUpServerThread(Socket socket, ArrayList<Members> players) {
 		this.socket = socket;
 		this.players = players;
-
-		pickCard();
 
 		try {
 			// 데이터 수신
@@ -51,34 +51,82 @@ public class StandUpServerThread implements Runnable {
 			out = new PrintWriter(socket.getOutputStream());
 
 			userID = in.readLine();
+			String id = createID();
+
 			ip = socket.getInetAddress();
-			if (players.size() < 2) {
+
+			Thread thread = new Thread(new Runnable() {
+
+				boolean b = true;
+				int c = 0;
+
+				@Override
+				public void run() {
+					while (b) {
+						c = 0;
+						try {
+							for (Members player : players) {
+								if (player.ready) {
+									c++;
+								}
+
+							}
+
+							if (c == players.size() && players.size() >= 2) {
+								System.out.println("play game");
+								users = users + players.get(0).name + " " + players.get(1).name;
+								b = false;
+							}
+						} catch (Exception e) {
+
+						}
+					}
+					broadcast("/ready true");
+					startGame();
+				}
+			});
+			thread.start();
+
+			if (players.size() < MAX_PLAYER) {
 				System.out.println(ip + "로부터 " + userID + "님이 접속하였습니다.");
 
 				// 모든 클라이언트에게 브로드캐스트
-				broadcast(userID + "님이 접속하셨습니다.");
+				broadcast(userID + "(" + id + ") 님이 접속하셨습니다.");
+				playerVisit();
 
 				synchronized (players) {
-					players.add(new Members(userID, out, false));
+					int[] indexes = new int[MAX_PLAYER];
+					Members member;
+
+					for (int i = 0; i < players.size(); i++) {
+						member = players.get(i);
+						indexes[member.index - 1] = member.index;
+					}
+
+					for (int i = 0; i < MAX_PLAYER; i++) {
+						if (indexes[i] == 0) {
+							players.add(new Members(id, userID, out, false, MONEY, i + 1));
+							System.out.println("index = " + (i + 1));
+							break;
+						}
+					}
 				}
 
-				if (players.size() >= 2) {
+				if (players.size() >= MAX_PLAYER) {
 
 					users = users + players.get(0).name + " " + players.get(1).name;
 
 					System.out.println(players.size());
 
-					if (players.size() >= 2) {
-						System.out.println(
-								"/member " + players.get(0).name + " " + players.get(1).name + " size = " + players.size());
+					if (players.size() >= MAX_PLAYER) {
+						System.out.println("/member " + players.get(0).name + " " + players.get(1).name + " size = "
+								+ players.size());
 					}
-
-					startGame();
 				}
 
 			} else {
 				synchronized (players) {
-					players.add(new Members(userID, out, false));
+					players.add(new Members(id, userID, out, false, MONEY, 6));
 					sendNotice("/to " + userID + " 인원수가 초과되었습니다.", userID);
 					players.remove(players.size() - 1);
 				}
@@ -89,17 +137,33 @@ public class StandUpServerThread implements Runnable {
 		}
 	}
 
+	public String createID() {
+		Calendar cal = Calendar.getInstance();
+		int h = cal.get(Calendar.HOUR_OF_DAY);
+		int m = cal.get(Calendar.MINUTE);
+		int s = cal.get(Calendar.MILLISECOND);
+		int ran = (int) (Math.random() * 9999) + 1000;
+
+		return String.format(Locale.KOREA, "%02d%02d%02d%04d", h, m, s, ran);
+	}
+
 	public void pickCard() {
-		for (int i = 0; i < 4; i++) {
+		for (int i = 0; i < 10; i++) {
 			int number = (int) (Math.random() * 20);
 			System.out.println("number = " + number);
-			cards[i] = number;
+			StandUpServer.cards[i] = number;
 			for (int j = 0; j < i; j++) {
-				if (cards[j] == number) {
+				if (StandUpServer.cards[j] == number) {
 					i--;
 				}
 			}
 		}
+		
+		System.out.print("원본 = ");
+		for(int i = 0; i < 10; i++) {
+			System.out.print(StandUpServer.cards[i] + " ");
+		}
+		System.out.println();
 
 		if (boolReset) {
 			StandUpServer.total = 0;
@@ -109,12 +173,49 @@ public class StandUpServerThread implements Runnable {
 			StandUpServer.total = 0;
 		}
 	}
+	
+	public void playerVisit() {
+		String strName = "";
+		String strIndex = "";
+		Members player;
+		
+		for(int i = 0; i < players.size(); i++) {
+			player = players.get(i);
+			
+			strName += player.name + " ";
+			strIndex += player.index + " ";
+		}
+		
+		strName = strName.trim();
+		strIndex = strIndex.trim();
+		
+		broadcast("/player " + strName);
+		broadcast("/index " + strIndex);
+	}
 
 	public void startGame() {
-		broadcast("/button false");
-		broadcast("/play " + users);
 
-		broadcast("/card " + cards[0] + " " + cards[1] + " " + cards[2] + " " + cards[3]);
+		try {
+			Thread.sleep(3000);
+		} catch (Exception e) {
+			
+		}
+		StandUpServer.pickCard();
+		broadcast("/play");
+		
+		String card = "";
+		Members player;
+		
+		for(int i = 0; i < players.size(); i++) {
+			player = players.get(i);
+			player.card1 = StandUpServer.cards[2 * i];
+			player.card2 = StandUpServer.cards[2 * i + 1];
+			
+			card += player.card1 + " " + player.card2 + " ";
+		}
+
+		System.out.println("server = " + card);
+		broadcast("/card " + card.trim());
 
 		broadcast("/money " + StandUpServer.money1 + " " + StandUpServer.money2);
 
@@ -122,8 +223,8 @@ public class StandUpServerThread implements Runnable {
 			Thread.sleep(3000);
 			StandUpServer.turn = 1;
 			broadcast("/button true");
-			broadcast("/turn " + StandUpServer.turn + " " + "true " + StandUpServer.betting + " " + StandUpServer.total
-					+ " " + StandUpServer.money1 + " " + StandUpServer.money2);
+			broadcast("/turn " + players.get(StandUpServer.turnCnt).name);
+			//broadcast("/turn " + StandUpServer.turn + " " + "true " + StandUpServer.betting + " " + StandUpServer.total + " " + StandUpServer.money1 + " " + StandUpServer.money2);
 		} catch (InterruptedException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -151,16 +252,37 @@ public class StandUpServerThread implements Runnable {
 				} else if (rcvData.indexOf("/to") >= 0) { // 귓속말
 					sendMsg(rcvData);
 				} else {
-					if(!rcvData.split(" ")[0].equals("/mouse")) {
+					if (!rcvData.split(" ")[0].equals("/mouse")) {
 						System.out.println("[" + userID + "] " + rcvData);
 					}
 					// 모든 클라이언트에게 브로드캐스트
 					broadcast("[" + userID + "] " + rcvData);
 				}
 
+				if (tag.equals("/ready")) {
+					String name = rcvData.split(" ")[1];
+					boolean b = Boolean.parseBoolean(rcvData.split(" ")[2]);
+
+					for (int i = 0; i < players.size(); i++) {
+						if (players.get(i).name.equals(name)) {
+							players.get(i).ready = b;
+						}
+					}
+				}
+
 				if (tag.equals("/turn")) {
 					if (rcvData.split(" ")[2].equals("call")) {
-						StandUpServer.turn = 0;
+						broadcast("/button true");
+						StandUpServer.callCnt++;
+						StandUpServer.turnCnt++;
+						
+						if(StandUpServer.turnCnt == players.size()) {
+							StandUpServer.turnCnt = 0;
+						}
+						
+						broadcast("/turn " + players.get(StandUpServer.turnCnt).name);
+						
+						/*StandUpServer.turn = 0;
 						StandUpServer.betting = Integer.parseInt(rcvData.split(" ")[3]);
 						StandUpServer.total += StandUpServer.betting;
 						System.out.println(">>>>>>>>>>>>> call = " + StandUpServer.total);
@@ -187,8 +309,7 @@ public class StandUpServerThread implements Runnable {
 						broadcast("/open");
 						Thread.sleep(5000);
 						broadcast("/close");
-						pickCard();
-						startGame();
+						startGame();*/
 
 					} else if (rcvData.split(" ")[2].equals("die")) {
 
@@ -203,7 +324,6 @@ public class StandUpServerThread implements Runnable {
 
 						Thread.sleep(5000);
 						broadcast("/close");
-						pickCard();
 						startGame();
 					} else if (rcvData.split(" ")[2].equals("plus")) {
 						broadcast("/button true");
@@ -245,6 +365,10 @@ public class StandUpServerThread implements Runnable {
 					yPos = Integer.parseInt(rcvData.split(" ")[2]);
 					broadcast(rcvData);
 				}
+				
+				if(tag.equals("/visitors")) {
+					playerVisit();
+				}
 
 			}
 		} catch (Exception e) {
@@ -281,6 +405,17 @@ public class StandUpServerThread implements Runnable {
 			for (int i = 0; i < players.size(); i++) {
 				out = players.get(i).writer;
 				out.println(message);
+				out.flush();
+			}
+		}
+	}
+
+	@SuppressWarnings("null")
+	public void broadcastObject(Object obj) {
+		synchronized (players) {
+			PrintWriter out = null;
+			for (int i = 0; i < players.size(); i++) {
+				out.println(obj);
 				out.flush();
 			}
 		}
@@ -325,7 +460,7 @@ public class StandUpServerThread implements Runnable {
 		if (end != -1) {
 			String id = message.substring(begin, end);
 			String msg = message.substring(end + 1);
-			
+
 			PrintWriter out = null;
 
 			for (int i = 0; i < players.size(); i++) {

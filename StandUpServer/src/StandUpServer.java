@@ -7,14 +7,20 @@ import java.util.HashMap;
 
 public class StandUpServer {
 	
+	public static int turnCnt = 0;
+	public static int callCnt = 0;
 	public static int turn = 0;
 	public static int next = 0;
-	public static boolean boolFirst = true;
 	public static int money1 = 100000000;
 	public static int money2 = 100000000;
 	public static int betting = 0;
 	public static int total = 0;
 	public static int lose = 0;
+	public static boolean boolFirst = true;
+	public static boolean boolStart = false;
+	public static boolean boolPick = false;
+	public static String nextPlayer = "";
+	public static int[] cards = new int[10];
 	
 	int port = 9999;
 	ServerSocket listener = null;	// ServerSocket: 연결 요청을 기다리는 소켓
@@ -48,6 +54,28 @@ public class StandUpServer {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+	}
+	
+	public static void pickCard() {
+		if(boolPick) return;
+		
+		boolPick = true;
+		for (int i = 0; i < 10; i++) {
+			int number = (int) (Math.random() * 20);
+			System.out.println("number = " + number);
+			StandUpServer.cards[i] = number;
+			for (int j = 0; j < i; j++) {
+				if (StandUpServer.cards[j] == number) {
+					i--;
+				}
+			}
+		}
+		
+		System.out.print("원본 = ");
+		for(int i = 0; i < 10; i++) {
+			System.out.print(StandUpServer.cards[i] + " ");
+		}
+		System.out.println();
 	}
 	
 	public static void main(String[] args) {
